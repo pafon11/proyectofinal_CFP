@@ -36,6 +36,7 @@ def entrenar_y_guardar():
 
     print("Cargando expedientes de pacientes...")
     df = pd.read_sql(query, engine)
+    df = df.sample(n=min(20000, len(df)), random_state=42)
     print(f"   Se cargaron {len(df):,} registros.")
 
     columnas_texto = ['nuevos', 'intervencion', 'dx', 'resclin']
