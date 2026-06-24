@@ -4,6 +4,8 @@
 #   Ing. Marco Fernando Andrade Cedillo
 # ============================================================
 
+import os
+import pickle
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
@@ -12,120 +14,108 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report, accuracy_score
 
-# ── PASO 1: CONECTAR CON LA BASE DE DATOS ────────────────────
-print("Conectando con la base de datos Covid19_final...")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'forest_model.pkl')
 
-import os
-DB_HOST = os.environ.get("DB_HOST", "localhost")
-DB_PORT = os.environ.get("DB_PORT", "3306")
-DB_USER = os.environ.get("DB_USER", "root")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+def entrenar_y_guardar():
+    print("Conectando con la base de datos Covid19_final...")
 
-if DB_HOST == "localhost":
-    engine = create_engine(f'mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/Covid19_final')
-else:
-    engine = create_engine(f'mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/Covid19_final?ssl_ca=&ssl_verify_cert=false')
+    DB_HOST = os.environ.get("DB_HOST", "localhost")
+    DB_PORT = os.environ.get("DB_PORT", "3306")
+    DB_USER = os.environ.get("DB_USER", "root")
+    DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
 
-# ── PASO 2: TRAER LOS DATOS CON SQL ──────────────────────────
-query = """
-SELECT
-    nuevos,
-    intervencion,
-    cantidad,
-    tarifa,
-    dx,
-    resclin,
-    caso
-FROM registro_a
-"""
+    if DB_HOST == "localhost":
+        engine = create_engine(f'mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/Covid19_final')
+    else:
+        engine = create_engine(f'mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/Covid19_final?ssl_ca=&ssl_verify_cert=false')
 
-print("Cargando expedientes de pacientes...")
-df = pd.read_sql(query, engine)
+    query = """
+    SELECT nuevos, intervencion, cantidad, tarifa, dx, resclin, caso
+    FROM registro_a
+    """
 
-print(f"   Se cargaron {len(df):,} registros.")
-print(f"   Columnas: {list(df.columns)}\n")
+    print("Cargando expedientes de pacientes...")
+    df = pd.read_sql(query, engine)
+    print(f"   Se cargaron {len(df):,} registros.")
 
-# ── PASO 3: LIMPIAR Y TRADUCIR LOS DATOS ─────────────────────
-print("Traduciendo textos a numeros...")
+    columnas_texto = ['nuevos', 'intervencion', 'dx', 'resclin']
+    traductores = {}
+    for col in columnas_texto:
+        le = LabelEncoder()
+        df[col] = df[col].fillna('desconocido').astype(str)
+        df[col] = le.fit_transform(df[col])
+        traductores[col] = le
 
-columnas_texto = ['nuevos', 'intervencion', 'dx', 'resclin']
+    for col in ['cantidad', 'tarifa']:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-traductores = {}
-for col in columnas_texto:
-    le = LabelEncoder()
-    df[col] = df[col].fillna('desconocido').astype(str)
-    df[col] = le.fit_transform(df[col])
-    traductores[col] = le
-    print(f"   Columna '{col}' traducida.")
+    le_objetivo = LabelEncoder()
+    df['objetivo'] = le_objetivo.fit_transform(df['caso'].fillna('desconocido').astype(str))
 
-for col in ['cantidad', 'tarifa']:
-    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    X = df[['nuevos', 'intervencion', 'cantidad', 'tarifa', 'dx', 'resclin']]
+    y = df['objetivo']
 
-le_objetivo = LabelEncoder()
-df['objetivo'] = le_objetivo.fit_transform(df['caso'].fillna('desconocido').astype(str))
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-print(f"\n   Estados posibles del paciente: {list(le_objetivo.classes_)}\n")
+    print("Entrenando Random Forest...")
+    sabios = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+    sabios.fit(X_train, y_train)
+    print("   Entrenamiento completado!")
 
-# ── PASO 4: SEPARAR PISTAS DEL RESULTADO FINAL ───────────────
-X = df[['nuevos', 'intervencion', 'cantidad', 'tarifa', 'dx', 'resclin']]
-y = df['objetivo']
+    predicciones = sabios.predict(X_test)
+    exactitud = accuracy_score(y_test, predicciones)
+    importancias = sabios.feature_importances_
 
-# ── PASO 5: GUARDAR DATOS PARA EL EXAMEN FINAL ───────────────
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y,
-    test_size=0.2,
-    random_state=42
-)
+    clases_en_examen = np.unique(np.concatenate([y_test, predicciones]))
+    nombres_clases = le_objetivo.inverse_transform(clases_en_examen)
 
-print(f"Datos partidos:")
-print(f"   Para estudiar  (entrenamiento): {len(X_train):,} registros")
-print(f"   Para el examen (prueba):        {len(X_test):,} registros\n")
+    from sklearn.metrics import classification_report
+    reporte_dict = classification_report(
+        y_test, predicciones,
+        labels=clases_en_examen,
+        target_names=nombres_clases,
+        output_dict=True
+    )
 
-# ── PASO 6: REUNIR AL CONSEJO DE 100 SABIOS ──────────────────
-print("Reuniendo al Consejo de los 100 Sabios del Bosque...")
+    paciente_nuevo = [[0, 0, 3, 1500, 0, 0]]
+    prediccion = sabios.predict(paciente_nuevo)
+    estado_predicho = le_objetivo.inverse_transform(prediccion)[0]
 
-sabios = RandomForestClassifier(
-    n_estimators=100,
-    random_state=42,
-    n_jobs=-1
-)
+    bundle = {
+        'sabios': sabios,
+        'X': X,
+        'importancias': importancias,
+        'exactitud': exactitud,
+        'y_test': y_test,
+        'predicciones': predicciones,
+        'le_objetivo': le_objetivo,
+        'estado_predicho': estado_predicho,
+        'traductores': traductores,
+        'reporte_dict': reporte_dict,
+        'nombres_clases': nombres_clases,
+    }
 
-print("Los sabios estan leyendo todos los expedientes... (puede tardar 1-2 min)")
-sabios.fit(X_train, y_train)
-print("   Los sabios ya terminaron de estudiar!\n")
+    with open(MODEL_PATH, 'wb') as f:
+        pickle.dump(bundle, f)
+    print(f"   Modelo guardado en {MODEL_PATH}")
+    return bundle
 
-# ── PASO 7: REVISAR QUE VARIABLE PESA MAS ────────────────────
-print("Importancia de cada variable (que datos pesan mas?):")
-importancias = sabios.feature_importances_
-for nombre, importancia in zip(X.columns, importancias):
-    barra = "█" * int(importancia * 50)
-    print(f"   {nombre:<15}: {importancia:.3f}  {barra}")
+def cargar_modelo():
+    if os.path.exists(MODEL_PATH):
+        print("Cargando modelo pre-entrenado...")
+        with open(MODEL_PATH, 'rb') as f:
+            return pickle.load(f)
+    else:
+        return entrenar_y_guardar()
 
-print()
+# Al importar el módulo, carga o entrena
+_bundle = cargar_modelo()
 
-# ── PASO 8: PONERLE EL EXAMEN A LOS SABIOS ───────────────────
-print("Aplicando el examen sorpresa a los Sabios...")
-predicciones = sabios.predict(X_test)
-
-exactitud = accuracy_score(y_test, predicciones)
-print(f"   Exactitud del Consejo: {exactitud:.2%}\n")
-
-# Detectamos solo las clases que realmente aparecieron en el examen
-clases_en_examen = np.unique(np.concatenate([y_test, predicciones]))
-nombres_clases   = le_objetivo.inverse_transform(clases_en_examen)
-
-print("BOLETA DE CALIFICACIONES DEL CONSEJO DE SABIOS:")
-print("=" * 60)
-print(classification_report(y_test, predicciones,
-                             labels=clases_en_examen,
-                             target_names=nombres_clases))
-
-# ── PASO 9: PREDECIR UN PACIENTE NUEVO ───────────────────────
-print("\nLLEGA UN PACIENTE NUEVO AL CONSULTORIO...")
-
-paciente_nuevo = [[0, 0, 3, 1500, 0, 0]]
-prediccion     = sabios.predict(paciente_nuevo)
-estado_predicho = le_objetivo.inverse_transform(prediccion)[0]
-
-print(f"   El Consejo dictamina que el paciente sera: {estado_predicho.upper()}")
-print("\nPractica completada con exito!")
+sabios        = _bundle['sabios']
+X             = _bundle['X']
+importancias  = _bundle['importancias']
+exactitud     = _bundle['exactitud']
+y_test        = _bundle['y_test']
+predicciones  = _bundle['predicciones']
+le_objetivo   = _bundle['le_objetivo']
+estado_predicho = _bundle['estado_predicho']
