@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Regresión Backup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav class="topbar">
+  <a href="/" class="topbar-brand"><span class="dot"></span>Proyecto</a>
+  <a href="/" class="btn-back">← Regresar al menú</a>
+</nav>
+
+<div class="main">
+  <div class="page-header">
+    <span class="tag">Regresión Lineal · MySQL</span>
+    <h2>Predicción de Tamaño de Backup</h2>
+    <p>Estima el espacio de backup (GB) necesario en función del número de usuarios activos.</p>
+  </div>
+
+  <div class="control-panel">
+    <h3>Acciones</h3>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="accion('calcular')">Calcular regresión</button>
+      <button class="btn btn-outline"  onclick="accion('ver')">Ver datos</button>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Usuarios a predecir (miles)</label>
+        <input type="number" id="inp-usuarios" placeholder="ej. 12" min="0.01" step="0.01">
+      </div>
+      <label class="check-label">
+        <input type="checkbox" id="chk-guardar"> Guardar en BD
+      </label>
+       <button class="btn btn-primary" onclick="predecir()"> Predecir backup</button>
+       <label>Si deseas guardar en la base dedatos selecciona la casilla y presiona el boton de "predecir backup"</label>
+      
+    </div>
+  </div>
+
+  <div class="loading" id="loading"><div class="spinner"></div> Consultando base de datos…</div>
+  <div class="error-box" id="error-box"></div>
+
+  <div id="results">
+
+    <!-- PREDICCIÓN -->
+    <div id="sec-prediccion" style="display:none">
+      <p class="section-title">Resultado de predicción</p>
+      <div class="prediccion-result">
+        <div>
+          <div class="pred-label" id="pred-input-label">Usuarios</div>
+          <div style="font-size:.95rem; color:var(--text-muted)" id="pred-input-val"></div>
+        </div>
+        <div style="font-size:2rem; color:var(--accent-2)">→</div>
+        <div>
+          <div class="pred-label">Backup estimado</div>
+          <div><span class="pred-val" id="pred-output-val"></span><span class="pred-unit"> GB</span></div>
+        </div>
+        <div id="pred-saved" class="pred-saved" style="display:none">✓ Guardado en BD</div>
+      </div>
+    </div>
+
+    <!-- ECUACIÓN -->
+    <div id="sec-ecuacion" style="display:none">
+      <p class="section-title">Ecuación de regresión</p>
+      <div class="ecuacion-card">
+        <span class="eq-label">Modelo lineal</span>
+        <span class="eq-formula" id="eq-formula"></span>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="label">B₀ (intercepto)</div><div class="value" id="val-b0"></div></div>
+        <div class="stat-card"><div class="label">B₁ (pendiente)</div><div class="value" id="val-b1"></div></div>
+        <div class="stat-card highlight"><div class="label">Registros analizados</div><div class="value" id="val-n"></div><div class="sub">filas en BD</div></div>
+      </div>
+    </div>
+
+    <!-- ESTADÍSTICAS -->
+    <div id="sec-stats" style="display:none">
+      <p class="section-title">Estadísticas del cálculo</p>
+      <div class="stats-row">
+        <div class="stat-card"><div class="label">Σx (usuarios)</div><div class="value badge-num" id="val-sx"></div></div>
+        <div class="stat-card"><div class="label">Σy (backup)</div><div class="value badge-num" id="val-sy"></div></div>
+        <div class="stat-card"><div class="label">Σxy</div><div class="value badge-num" id="val-sxy"></div></div>
+        <div class="stat-card"><div class="label">Σx²</div><div class="value badge-num" id="val-sx2"></div></div>
+        <div class="stat-card"><div class="label">Promedio X</div><div class="value badge-num" id="val-xp"></div></div>
+        <div class="stat-card"><div class="label">Promedio Y</div><div class="value badge-num" id="val-yp"></div></div>
+      </div>
+    </div>
+
+    <!-- TABLA DE DATOS -->
+    <div id="sec-tabla" style="display:none">
+      <p class="section-title">Datos en base de datos</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Usuarios (miles)</th><th>Backup (GB)</th></tr></thead>
+          <tbody id="tabla-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /results -->
+</div>
+
+<footer class="footer">Cuevas Fonseca Paola - Proyecto Final</footer>
+
+<script>
+const loading  = document.getElementById('loading');
+const errorBox = document.getElementById('error-box');
+const results  = document.getElementById('results');
+
+function showLoading(v) {
+  loading.classList.toggle('visible', v);
+  if (v) { errorBox.classList.remove('visible'); results.classList.remove('visible'); }
+}
+function showError(msg) { errorBox.textContent = '❌ ' + msg; errorBox.classList.add('visible'); }
+
+function renderDatos(datos) {
+  const body = document.getElementById('tabla-body');
+  body.innerHTML = datos.map((r, i) =>
+    `<tr><td>${i+1}</td><td class="badge-num">${r.x.toFixed(2)}</td><td class="badge-num">${r.y.toFixed(2)}</td></tr>`
+  ).join('');
+  document.getElementById('sec-tabla').style.display = '';
+}
+
+function renderRegresion(d) {
+  document.getElementById('eq-formula').textContent  = d.ecuacion;
+  document.getElementById('val-b0').textContent = d.B0;
+  document.getElementById('val-b1').textContent = d.B1;
+  document.getElementById('val-n').textContent  = d.n;
+  document.getElementById('val-sx').textContent  = d.suma_x;
+  document.getElementById('val-sy').textContent  = d.suma_y;
+  document.getElementById('val-sxy').textContent = d.suma_xy;
+  document.getElementById('val-sx2').textContent = d.suma_x2;
+  document.getElementById('val-xp').textContent  = d.xprom;
+  document.getElementById('val-yp').textContent  = d.yprom;
+  document.getElementById('sec-ecuacion').style.display = '';
+  document.getElementById('sec-stats').style.display    = '';
+}
+
+async function llamar(payload) {
+  showLoading(true);
+  try {
+    const res  = await fetch('/regresion1/run', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const d    = await res.json();
+    showLoading(false);
+    if (d.status !== 'success') { showError(d.error || 'Error desconocido'); return; }
+
+    // Reset sections
+    ['sec-prediccion','sec-ecuacion','sec-stats','sec-tabla'].forEach(id => document.getElementById(id).style.display='none');
+    results.classList.add('visible');
+
+    renderDatos(d.datos);
+    renderRegresion(d);
+
+    if (d.prediccion) {
+      const p = d.prediccion;
+      document.getElementById('pred-input-val').textContent  = p.input_val + ' ' + p.input_unit;
+      document.getElementById('pred-output-val').textContent = p.output_val;
+      const saved = document.getElementById('pred-saved');
+      saved.style.display = d.guardado ? '' : 'none';
+      document.getElementById('sec-prediccion').style.display = '';
+    }
+  } catch(e) { showLoading(false); showError('Error de conexión: ' + e.message); }
+}
+
+function accion(tipo) { llamar({ action: tipo }); }
+
+function predecir() {
+  const val = parseFloat(document.getElementById('inp-usuarios').value);
+  if (!val || val <= 0) { showError('Ingresa una cantidad de usuarios válida (mayor a 0)'); return; }
+  llamar({ action:'predecir', usuarios: val, guardar: document.getElementById('chk-guardar').checked });
+}
+</script>
+</body>
+</html>

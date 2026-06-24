@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proyecto Final</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="/" class="topbar-brand">
+    <span class="dot"></span>
+    Proyecto
+  </a>
+  <span style="font-size:.8rem; color:var(--text-muted); font-family:var(--font-mono);">v1.0</span>
+</nav>
+
+<div class="main">
+  <div class="hero">
+    <p class="hero-eyebrow">Fundamentos de Analítica de Datos </p>
+    <h1>Centro de Modelos<br>Predictivos</h1>
+    <p>Selecciona un modelo para ejecutarlo, visualizar sus resultados y realizar predicciones.</p>
+  </div>
+
+  <div class="cards-grid">
+
+    <a href="/forest" class="model-card">
+      <span class="card-tag">Random Forest</span>
+      <div class="card-title"> COVID-19</div>
+      <p class="card-desc">
+        Modelo entrenado con expedientes clínicos de pacientes COVID-19.
+        Predice el estado del paciente con base en intervenciones, diagnósticos y resultados clínicos.
+      </p>
+      <div class="card-cta">Ejecutar modelo <span>→</span></div>
+    </a>
+
+    <a href="/regresion1" class="model-card">
+      <span class="card-tag">Regresión Lineal</span>
+      <div class="card-title">Predicción de Backup</div>
+      <p class="card-desc">
+        Regresión lineal que estima el tamaño requerido de backup (GB) en función del número
+        de usuarios activos (miles). Datos dinámicos desde MySQL.
+      </p>
+      <div class="card-cta">Ejecutar modelo <span>→</span></div>
+    </a>
+
+    <a href="/regresion2" class="model-card">
+      <span class="card-tag">Regresión Lineal</span>
+      <div class="card-title">Predicción de Entrega</div>
+      <p class="card-desc">
+        Regresión lineal que predice el tiempo de entrega (minutos) a partir de la distancia
+        recorrida (km). Con lectura dinámica desde MySQL.
+      </p>
+      <div class="card-cta">Ejecutar modelo <span>→</span></div>
+    </a>
+
+    <a href="/regresion3" class="model-card">
+      <span class="card-tag">Regresión Lineal</span>
+      <div class="card-title">Predicción de Ventas</div>
+      <p class="card-desc">
+        Regresión lineal que estima las ventas generadas ($) en función de la inversión
+        realizada ($). Datos dinámicos desde MySQL con opción de guardar por mes.
+      </p>
+      <div class="card-cta">Ejecutar modelo <span>→</span></div>
+    </a>
+
+  </div>
+</div>
+
+<footer class="footer">
+ Cuevas Fonseca Paola - Proyecto Final
+</footer>
+
+</body>
+</html>
