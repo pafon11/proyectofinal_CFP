@@ -20,27 +20,8 @@ class CaptureOutput:
 # ── FOREST COVID-19 ──────────────────────────────────────────
 def run_forest_covid():
     try:
-        import importlib.util, os
-        # Importamos el módulo pero interceptamos los objetos clave
-        spec = importlib.util.spec_from_file_location(
-            "forest_covid",
-            os.path.join(os.path.dirname(__file__), "models", "forest_covid.py")
-        )
-        mod = importlib.util.module_from_spec(spec)
-
-        # Capturamos prints para tener log de fondo
-        with CaptureOutput():
-            spec.loader.exec_module(mod)
-
-        # Extraemos los objetos que el módulo dejó en su scope global
-        sabios       = mod.sabios
-        X            = mod.X
-        importancias = mod.importancias
-        exactitud    = mod.exactitud
-        y_test       = mod.y_test
-        predicciones = mod.predicciones
-        le_objetivo  = mod.le_objetivo
-        estado_predicho = mod.estado_predicho
+        from models.forest_covid import (sabios, X, importancias, exactitud,
+                                          y_test, predicciones, le_objetivo, estado_predicho)
 
         import numpy as np
         from sklearn.metrics import classification_report
@@ -264,7 +245,14 @@ def forest_opciones():
     """Retorna los valores únicos de dx e intervencion desde la BD."""
     try:
         from sqlalchemy import create_engine, text
-        engine = create_engine('mysql+mysqlconnector://root:@localhost/Covid19_final')
+        DB_HOST = os.environ.get("DB_HOST", "localhost")
+        DB_PORT = os.environ.get("DB_PORT", "3306")
+        DB_USER = os.environ.get("DB_USER", "root")
+        DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+        if DB_HOST == "localhost":
+            engine = create_engine(f'mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/Covid19_final')
+        else:
+            engine = create_engine(f'mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/Covid19_final?ssl_ca=&ssl_verify_cert=false')
         with engine.connect() as conn:
             dx_rows  = conn.execute(text("SELECT DISTINCT dx FROM registro_a WHERE dx IS NOT NULL ORDER BY dx LIMIT 80")).fetchall()
             int_rows = conn.execute(text("SELECT DISTINCT intervencion FROM registro_a WHERE intervencion IS NOT NULL ORDER BY intervencion LIMIT 80")).fetchall()
@@ -282,18 +270,7 @@ def forest_predecir():
     try:
         data = request.get_json() or {}
 
-        import importlib.util, os
-        spec = importlib.util.spec_from_file_location(
-            "forest_covid2",
-            os.path.join(os.path.dirname(__file__), "models", "forest_covid.py")
-        )
-        mod = importlib.util.module_from_spec(spec)
-        with CaptureOutput():
-            spec.loader.exec_module(mod)
-
-        sabios      = mod.sabios
-        traductores = mod.traductores
-        le_objetivo = mod.le_objetivo
+        from models.forest_covid import sabios, traductores, le_objetivo
 
         import pandas as pd
 
