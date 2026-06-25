@@ -2,6 +2,6 @@ flask==3.0.3
 mysql-connector-python==8.4.0
 pandas
 numpy
-scikit-learn
+scikit-learn==1.5.0
 sqlalchemy
 gunicorn==22.0.0
