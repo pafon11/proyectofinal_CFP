@@ -65,9 +65,9 @@ def run_forest_covid():
             "estado_predicho": estado_predicho.upper(),
             "importancias": imp_list,
             "reporte": reporte_tabla,
-            "n_train": int(len(mod.X_train)),
-            "n_test":  int(len(mod.X_test)),
-            "n_total": int(len(mod.X_train) + len(mod.X_test)),
+            "n_train": int(len(X) * 0.8),
+            "n_test":  int(len(X) * 0.2),
+            "n_total": int(len(X)),
             "clases":  list(le_objetivo.classes_)
         }
     except Exception as e:
